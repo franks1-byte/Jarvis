@@ -97,7 +97,8 @@ class GuiJarvis(J.Jarvis):
             lines += ["Highlights:"] + [f"  • {h}" for h in result["highlights"][:8]] + [""]
         if result["actions"]:
             lines += ["Action items:"] + [f"  ☐ {a}" for a in result["actions"][:8]] + [""]
-        lines.append("Full minutes opened in your editor (Documents › Jarvis Meetings).")
+        lines.append("📄 Word document created and opened: Documents › Jarvis Meetings › "
+                     + __import__("os").path.basename(result["path"]))
         self.ui.post("minutes", "\n".join(lines))
         self.voice.say(f"Your meeting minutes are ready, {J.TITLE}. {result['tldr']}".strip())
         if J.IS_WIN:

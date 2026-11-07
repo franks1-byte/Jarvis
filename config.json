@@ -80,6 +80,7 @@
     "auto_stop_when_call_ends": true,
     "minutes_language": "English",
     "transcribe_language": "en-US",
-    "keep_audio": true
+    "keep_audio": true,
+    "create_docx": true
   }
 }

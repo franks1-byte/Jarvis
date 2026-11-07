@@ -190,13 +190,21 @@ class MeetingRecorder:
         path = os.path.splitext(wav_path)[0] + "_minutes.md"
         with open(path, "w", encoding="utf-8") as f:
             f.write(md)
+        docx_path = None
+        if self.cfg.get("create_docx", True):
+            try:
+                docx_path = os.path.splitext(wav_path)[0] + "_minutes.docx"
+                write_docx(body, docx_path, self.started_at, mins, tldr)
+            except Exception as e:
+                print(f"[meeting] Word file not created: {e}")
+                docx_path = None
         if not self.cfg.get("keep_audio", True):
             try:
                 os.remove(wav_path)
             except OSError:
                 pass
-        self.last_minutes = path
-        return {"path": path, "tldr": tldr, "highlights": section_bullets(body, "Highlights"),
+        self.last_minutes = docx_path or path
+        return {"path": docx_path or path, "markdown": path, "docx": docx_path, "tldr": tldr, "highlights": section_bullets(body, "Highlights"),
                 "actions": section_bullets(body, "Action Items")}
 
     def _gemini_minutes(self, wav_path, brain):
@@ -252,3 +260,120 @@ def section_bullets(md, title):
         return []
     return [re.sub(r"^\s*-\s*(\[[ x]\]\s*)?", "", l).replace("**", "").strip()
             for l in m.group(1).splitlines() if l.strip().startswith("-")]
+
+
+# ─────────────────────────── Word document export ─────────────────────────────
+def write_docx(body, path, started_at, minutes, tldr=""):
+    """Build a clean, styled Word document from the minutes Markdown."""
+    from docx import Document
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Pt, RGBColor, Cm
+
+    ACCENT = RGBColor(0x0B, 0x6E, 0x99)
+    GREY = RGBColor(0x6B, 0x7B, 0x8C)
+
+    doc = Document()
+    for sec in doc.sections:
+        sec.left_margin = sec.right_margin = Cm(2.2)
+        sec.top_margin = sec.bottom_margin = Cm(2.0)
+    normal = doc.styles["Normal"]
+    normal.font.name = "Calibri"
+    normal.font.size = Pt(11)
+    normal.paragraph_format.space_after = Pt(4)
+
+    def runs(par, text, size=None, color=None):
+        """Add text with **bold** segments."""
+        for i, part in enumerate(re.split(r"\*\*(.+?)\*\*", text)):
+            if not part:
+                continue
+            r = par.add_run(part)
+            r.bold = (i % 2 == 1)
+            if size:
+                r.font.size = Pt(size)
+            if color:
+                r.font.color.rgb = color
+        return par
+
+    def shade(cell, hex_fill):
+        tcPr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), hex_fill)
+        tcPr.append(shd)
+
+    # title block
+    t = doc.add_paragraph()
+    r = t.add_run("MEETING MINUTES")
+    r.bold = True
+    r.font.size = Pt(24)
+    r.font.color.rgb = ACCENT
+    sub = doc.add_paragraph()
+    runs(sub, "Prepared by J.A.R.V.I.S.", size=9, color=GREY)
+
+    table = doc.add_table(rows=2, cols=2)
+    table.alignment = WD_TABLE_ALIGNMENT.LEFT
+    table.autofit = False
+    table.columns[0].width, table.columns[1].width = Cm(3.2), Cm(13.4)
+    for row, (k, v) in zip(table.rows, (("Date", started_at.strftime("%A, %B %d, %Y · %I:%M %p")),
+                                         ("Duration", f"{minutes} minute{'s' if minutes != 1 else ''}"))):
+        row.cells[0].width, row.cells[1].width = Cm(3.2), Cm(13)
+        shade(row.cells[0], "E6F3F8")
+        runs(row.cells[0].paragraphs[0], f"**{k}**", size=10)
+        runs(row.cells[1].paragraphs[0], v, size=10)
+
+    if tldr:
+        box = doc.add_table(rows=1, cols=1)
+        cell = box.rows[0].cells[0]
+        shade(cell, "FFF4DC")
+        runs(cell.paragraphs[0], f"**TL;DR:** {tldr}")
+
+    in_transcript = False
+    for raw in body.splitlines():
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        if line.startswith("## "):
+            title = line[3:].strip()
+            in_transcript = title.lower() == "transcript"
+            h = doc.add_heading(level=1)
+            hr = h.add_run(title)
+            hr.font.color.rgb = ACCENT
+            hr.font.size = Pt(15)
+            continue
+        if line.startswith("# "):
+            continue
+        if line.startswith(">"):
+            p = doc.add_paragraph()
+            runs(p, line.lstrip("> ").strip(), color=GREY)
+            for r in p.runs:
+                r.italic = True
+            continue
+        m = re.match(r"^\s*-\s*\[( |x)\]\s*(.*)", line)
+        if m:
+            p = doc.add_paragraph()
+            p.paragraph_format.left_indent = Cm(0.6)
+            runs(p, ("☑ " if m.group(1) == "x" else "☐ ") + m.group(2))
+            continue
+        if re.match(r"^\s*[-*]\s+", line):
+            p = doc.add_paragraph(style="List Bullet")
+            text = re.sub(r"^\s*[-*]\s+", "", line)
+            ts = re.match(r"^(\[\d{1,2}:\d{2}(?::\d{2})?\])\s*(.*)", text)
+            if ts:
+                runs(p, ts.group(1) + "  ", color=GREY, size=9)
+                runs(p, ts.group(2))
+            else:
+                runs(p, text)
+            continue
+        ts = re.match(r"^(\[\d{1,2}:\d{2}(?::\d{2})?\])\s*(.*)", line)
+        if ts and in_transcript:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_after = Pt(2)
+            runs(p, ts.group(1) + "  ", color=GREY, size=9)
+            runs(p, ts.group(2), size=10)
+            continue
+        runs(doc.add_paragraph(), line.strip("_") if line.startswith("_") else line)
+
+    doc.save(path)

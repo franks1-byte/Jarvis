@@ -62,7 +62,7 @@ Gi-record ni Jarvis ang **imong mic** ug ang **tingog sa imong mga kauban** (bis
 
 **Pag-stop:** i-click ang **■ STOP MEETING**, o i-type ang *"stop meeting notes"*.
 
-**Unsay makuha nimo** (`Documents\Jarvis Meetings\…_minutes.md`, automatic moabli):
+**Unsay makuha nimo**: automatic mo-create si Jarvis og **Word document** (`Documents\Jarvis Meetings\…_minutes.docx`) ug automatic pud kini moabli. Pwede nimo i-upload sa Google Drive para ma-edit sa Google Docs, o i-share sa imong groupmates. Naa pud `.md` copy. Ang sulod:
 - **TL;DR** nga basahon ni Jarvis
 - **Summary**
 - **Highlights** nga naay timestamps `[mm:ss]`
@@ -80,6 +80,7 @@ Settings sa `config.json` → `"meeting"`:
 - `auto_start: true` = mo-record dayon nga walay pangutana
 - `minutes_language` = pinulongan sa minutes, e.g. `"Filipino"`
 - `keep_audio: false` = i-delete ang .wav human sa summary
+- `create_docx: false` = dili na mo-create og Word file (.md ra)
 
 ### 🧠 Himoang smart (Gemini AI) — optional
 1. Kuha og libre nga API key sa https://aistudio.google.com/apikey

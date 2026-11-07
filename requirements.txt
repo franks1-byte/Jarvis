@@ -9,3 +9,4 @@ standard-aifc; python_version >= "3.13"
 audioop-lts; python_version >= "3.13"
 soundcard
 pycaw
+python-docx
