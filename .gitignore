@@ -4,3 +4,4 @@ notes.txt
 *.wav
 *.raw
 jarvis_error.log
+voice_cache/

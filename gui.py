@@ -360,8 +360,7 @@ class App:
             self.answer_q.put(text)
             return
         self.post("you", text)
-        m = self.jarvis.wake_re.search(text.lower())
-        cmd = text.lower()[m.end():].strip() if m and m.start() == 0 else text
+        cmd = self.jarvis.split_wake(text.lower())[1]
         self.cmd_q.put(cmd or "hello")
 
     def on_enter(self):
@@ -470,8 +469,7 @@ class App:
             try:
                 text = self.capture(timeout=7)
                 if text:
-                    m = self.jarvis.wake_re.search(text)
-                    cmd = text[m.end():].strip() if m else text
+                    cmd = self.jarvis.split_wake(text)[1]
                     self.cmd_q.put(cmd or "hello")
                 else:
                     if not self.busy:
@@ -508,9 +506,9 @@ class App:
                 if awake and time.time() >= self.jarvis.awake_until and not self.busy:
                     self.set_state("idle")
                 continue
-            m = self.jarvis.wake_re.search(text)
-            if m:
-                cmd = text[m.end():].strip()
+            addressed, cmd = self.jarvis.split_wake(text)
+            if addressed:
+                pass
             elif time.time() < self.jarvis.awake_until + 1.5:
                 cmd = text
             else:

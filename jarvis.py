@@ -34,6 +34,24 @@ NOTES_FILE = os.path.join(BASE_DIR, "notes.txt")
 
 
 # ─────────────────────────── VOICE (text-to-speech) ───────────────────────────
+VOICE_CACHE = os.path.join(BASE_DIR, "voice_cache")
+
+# Realistic neural voices (free, need internet). Ryan = the classic British JARVIS sound.
+VOICE_PRESETS = {
+    "jarvis": "en-GB-RyanNeural",
+    "british": "en-GB-ThomasNeural",
+    "american": "en-US-GuyNeural",
+    "filipino": "en-PH-JamesNeural",
+    "australian": "en-AU-WilliamNeural",
+    "friday": "en-GB-SoniaNeural",
+}
+
+
+def save_config():
+    with open(os.path.join(BASE_DIR, "config.json"), "w", encoding="utf-8") as f:
+        json.dump(CFG, f, indent=2, ensure_ascii=False)
+
+
 def _powershell_say(text):
     t = text.replace("'", "''")
     cmd = ("Add-Type -AssemblyName System.Speech;"
@@ -43,8 +61,22 @@ def _powershell_say(text):
                    creationflags=0x08000000)  # no console window
 
 
+def _play_mp3(path):
+    """Play an mp3 with Windows' built-in MCI player (no extra packages). Blocks until done."""
+    mci = ctypes.windll.winmm.mciSendStringW
+    mci("close jarvis_tts", None, 0, None)
+    err = mci(f'open "{path}" type mpegvideo alias jarvis_tts', None, 0, None)
+    if err:
+        raise RuntimeError(f"MCI error {err}")
+    try:
+        mci("play jarvis_tts wait", None, 0, None)
+    finally:
+        mci("close jarvis_tts", None, 0, None)
+
+
 class Voice:
-    """All speech goes through one worker thread (pyttsx3 isn't thread-safe)."""
+    """All speech goes through one worker thread.
+    Order: neural voice (edge-tts, internet) → pyttsx3 (offline) → Windows PowerShell voice."""
 
     def __init__(self, muted=False):
         self.muted = muted
@@ -52,13 +84,19 @@ class Voice:
         self.q = queue.Queue()
         self.pending = 0
         self._plock = threading.Lock()
+        vcfg = CFG.setdefault("voice", {})
+        self.engine_name = vcfg.get("engine", "neural")
+        self.neural_voice = vcfg.get("neural_voice", VOICE_PRESETS["jarvis"])
+        self.neural_rate = vcfg.get("neural_rate", "+0%")
+        self.neural_pitch = vcfg.get("neural_pitch", "-2Hz")
+        self.neural_ok = False
         if not muted:
             ready = threading.Event()
             threading.Thread(target=self._worker, args=(ready,), daemon=True).start()
             ready.wait(8)
 
-    def _worker(self, ready):
-        engine = None
+    # ── engines ──
+    def _init_offline(self):
         try:
             import pyttsx3
             engine = pyttsx3.init()
@@ -69,25 +107,101 @@ class Voice:
                 if match:
                     engine.setProperty("voice", match.id)
                     break
-            self.backend = "pyttsx3"
+            return engine
         except Exception as e:
-            print(f"[voice] pyttsx3 unavailable ({e}); using fallback")
-            self.backend = "powershell" if IS_WIN else None
+            print(f"[voice] pyttsx3 unavailable ({e}); offline fallback is the Windows voice")
+            return None
+
+    def _neural_file(self, text):
+        """Synthesize to an mp3 (short phrases are cached so greetings play instantly)."""
+        import asyncio
+        import hashlib
+        import tempfile
+        import edge_tts
+        key = hashlib.md5(f"{self.neural_voice}|{self.neural_rate}|{self.neural_pitch}|{text}".encode()).hexdigest()
+        cache = len(text) <= 90
+        if cache:
+            os.makedirs(VOICE_CACHE, exist_ok=True)
+            path = os.path.join(VOICE_CACHE, key + ".mp3")
+            if os.path.exists(path) and os.path.getsize(path) > 0:
+                return path, False
+        else:
+            path = os.path.join(tempfile.gettempdir(), f"jarvis_{key}.mp3")
+        comm = edge_tts.Communicate(text, self.neural_voice, rate=self.neural_rate, pitch=self.neural_pitch)
+        try:
+            asyncio.run(asyncio.wait_for(comm.save(path), timeout=8))
+        except Exception:
+            if os.path.exists(path):
+                os.remove(path)
+            raise
+        if os.path.getsize(path) == 0:
+            os.remove(path)
+            raise RuntimeError("empty audio")
+        return path, not cache
+
+    def _speak_neural(self, text):
+        path, temporary = self._neural_file(text)
+        try:
+            _play_mp3(path)
+        finally:
+            if temporary:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+    def _worker(self, ready):
+        engine = None
+        if self.engine_name == "neural" and IS_WIN:
+            try:
+                import edge_tts  # noqa: F401
+                self.neural_ok = True
+                self.backend = "neural"
+            except Exception as e:
+                print(f"[voice] Neural voice unavailable ({e}). Run: pip install edge-tts")
+        offline_loaded = False
+        if not self.neural_ok:
+            engine = self._init_offline()
+            offline_loaded = True
+            self.backend = "pyttsx3" if engine else ("powershell" if IS_WIN else None)
         ready.set()
+
         while True:
             text, done = self.q.get()
             try:
-                if engine:
-                    engine.say(text)
-                    engine.runAndWait()
-                elif self.backend == "powershell":
-                    _powershell_say(text)
+                spoken = False
+                if self.neural_ok and self.engine_name == "neural":
+                    try:
+                        self._speak_neural(text)
+                        spoken = True
+                    except Exception as e:
+                        print(f"[voice] neural voice failed ({e}); using offline voice")
+                if not spoken:
+                    if not offline_loaded:
+                        engine = self._init_offline()
+                        offline_loaded = True
+                    if engine:
+                        engine.say(text)
+                        engine.runAndWait()
+                    elif IS_WIN:
+                        _powershell_say(text)
             except Exception as e:
                 print(f"[voice error] {e}")
             finally:
                 with self._plock:
                     self.pending -= 1
                 done.set()
+
+    # ── public ──
+    def set_voice(self, name_or_id):
+        """Switch neural voice by preset name ('jarvis', 'filipino'…) or full id; saved to config."""
+        vid = VOICE_PRESETS.get(name_or_id.lower().strip(), name_or_id)
+        self.neural_voice = vid
+        self.engine_name = "neural"
+        CFG["voice"]["neural_voice"] = vid
+        CFG["voice"]["engine"] = "neural"
+        save_config()
+        return vid
 
     def say(self, text, wait=True):
         print(f"JARVIS: {text}")
@@ -327,6 +441,8 @@ class Jarvis:
             (r"^(goodbye|bye|exit|quit|go offline|stop listening|turn yourself off)\b", self.cmd_exit),
             (r"^(hi|hello|hey|good (morning|afternoon|evening))\b", self.cmd_hello),
             (r"(who are you|what are you|your name)", self.cmd_whoami),
+            (r"(?:change|switch|use)(?: your| the)? voice(?: to)?(?: (\w+))?", self.cmd_voice),
+            (r"(list|what) (?:are )?(?:your |the )?voices", self.cmd_voice_list),
             (r"^(?:start|begin) (?:the |a |my )?(?:meeting|minutes|taking notes)\b|^record (?:the |this |my )?(?:meeting|call)\b|^take meeting notes", self.cmd_meeting_start),
             (r"^(?:stop|end|finish) (?:the |my )?(?:meeting|minutes|recording)\b", self.cmd_meeting_stop),
             (r"\b(?:last|latest|previous) meeting\b|^(?:open|show|read) (?:my |the )?meeting (?:minutes|notes)", self.cmd_meeting_open),
@@ -364,6 +480,20 @@ class Jarvis:
         self.commands = [(re.compile(p), h) for p, h in self.commands]
 
     # ── core ──
+    def split_wake(self, text):
+        """Returns (addressed_to_jarvis, command).
+        'jarvis open notepad' -> open notepad | 'open notepad, jarvis' -> open notepad |
+        'change voice to jarvis' -> kept whole (the name is part of the command)."""
+        m = self.wake_re.search(text)
+        if not m:
+            return False, text
+        if m.start() == 0:
+            return True, text[m.end():].strip()
+        head = text[:m.start()].rstrip(" ,")
+        if m.end() >= len(text.rstrip(" .!?")) and not re.search(r"\b(to|as|voice|called|named)$", head):
+            return True, head
+        return True, text
+
     def say(self, text, wait=True):
         self.voice.say(text, wait)
 
@@ -412,9 +542,9 @@ class Jarvis:
                 print(f"YOU: {heard}")
 
             awake = time.time() < self.awake_until
-            m = self.wake_re.search(heard)
-            if m:
-                command = heard[m.end():].strip()
+            addressed, command = self.split_wake(heard)
+            if addressed:
+                pass
             elif awake or not self.listener or not CFG.get("require_wake_word", True):
                 command = heard
             else:
@@ -508,6 +638,20 @@ class Jarvis:
         else:
             print(f"[open] {path}")
         self.say("Opening your latest meeting minutes.")
+
+    def cmd_voice(self, m, t):
+        names = list(VOICE_PRESETS)
+        choice = (m.group(1) or "").lower()
+        if choice not in VOICE_PRESETS:                     # no/unknown name: cycle to the next voice
+            cur = next((k for k, v in VOICE_PRESETS.items() if v == self.voice.neural_voice), names[-1])
+            choice = names[(names.index(cur) + 1) % len(names)]
+        self.voice.set_voice(choice)
+        if not self.voice.neural_ok:
+            return self.say("The neural voices need the edge-tts package and internet. Run pip install edge-tts.")
+        self.say(f"Voice changed to {choice}. How do I sound, {TITLE}?")
+
+    def cmd_voice_list(self, m, t):
+        self.say("I can speak as " + ", ".join(VOICE_PRESETS) + ". Say, change voice to, then the name.")
 
     # ── handlers ──
     def cmd_exit(self, m, t):

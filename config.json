@@ -15,6 +15,10 @@
   "greeting": "Welcome, master.",
   "startup_report": true,
   "voice": {
+    "engine": "neural",
+    "neural_voice": "en-GB-RyanNeural",
+    "neural_rate": "+0%",
+    "neural_pitch": "-2Hz",
     "rate": 175,
     "prefer": [
       "george",

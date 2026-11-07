@@ -93,13 +93,32 @@ Settings sa `config.json` → `"meeting"`:
 - `city` — default city sa weather
 - `language` — `"fil-PH"` kung Tagalog/Filipino ang imong ika-command (pero English nga keywords gihapon ang "open", "play", etc.)
 
-### 🎙️ Tingog nga British (parehas sa Jarvis sa movie)
-Settings → Time & Language → Speech → **Add voices** → English (United Kingdom). Mopili dayon si Jarvis og "George" o "Ryan" nga voice. Kung wala, David ang gamiton.
+### 🎙️ Tingog ni Jarvis
+Matag tubag, **mosulti si Jarvis** gamit ang realistic nga neural voice. Default kay British male, parehas sa Jarvis sa movie. Pananglitan, kung moingon ka og *"Jarvis, what time is it?"*, motubag siya og *"It's 8:52 PM, master."* gamit iyang tingog.
+
+**Ilisi ang tingog:** isulti o i-type ang *"change voice to …"*
+
+| Ngalan | Tingog |
+|---|---|
+| `jarvis` | British male (default) |
+| `british` | Lain nga British male |
+| `american` | American male |
+| `filipino` | Filipino English male |
+| `australian` | Australian male |
+| `friday` | British female (parehas ni F.R.I.D.A.Y.) |
+
+- *"change your voice"* = sunod nga tingog sa lista
+- *"list your voices"* = isulti niya ang tanang pilian
+- Ang imong pili kay ma-save sa `config.json`.
+
+**Kinahanglan og internet** ang neural voice. Kung walay internet, automatic siya mobalik sa Windows voice. Para sa mas nindot nga offline voice: Settings → Time & Language → Speech → **Add voices** → English (United Kingdom).
+
+Para i-mute: i-click ang **VOICE ● ON** sa window.
 
 ### Problema?
 - **Wala kadungog** → check sa Windows Sound settings nga sakto ang default mic. Hilom una pag-start (nag-calibrate siya sa saba).
 - **"Can't reach speech service"** → kinahanglan og internet ang voice recognition.
-- **Wala'y tingog** → `pip install pyttsx3` balik; naa'y automatic fallback sa Windows voice.
+- **Wala'y tingog** → i-check nga ON ang **VOICE** button ug naa'y sound ang speakers. I-run ang `Jarvis.bat` para ma-install ang `edge-tts`.
 
 ---
 
