@@ -286,6 +286,25 @@ def greeting_for_hour():
     return "Good morning" if h < 12 else "Good afternoon" if h < 18 else "Good evening"
 
 
+class _NoMeeting:
+    """Stand-in when the meeting feature's packages are missing."""
+    active = False
+    levels = {"you": 0.0, "others": 0.0}
+    folder = os.path.join(os.path.expanduser("~"), "Documents", "Jarvis Meetings")
+
+    def __init__(self, reason):
+        self.reason = reason
+
+    def elapsed(self):
+        return 0.0
+
+    def start(self):
+        raise RuntimeError(f"meeting packages missing: {self.reason}")
+
+    def stop(self):
+        raise RuntimeError("not recording")
+
+
 # ─────────────────────────── JARVIS ───────────────────────────────────────────
 class Jarvis:
     def __init__(self, voice, listener):
@@ -294,8 +313,12 @@ class Jarvis:
         self.brain = Brain()
         self.running = True
         self.awake_until = 0.0
-        from meeting import MeetingRecorder
-        self.meeting = MeetingRecorder(CFG)
+        try:
+            from meeting import MeetingRecorder
+            self.meeting = MeetingRecorder(CFG)
+        except Exception as e:                       # e.g. numpy not installed: keep Jarvis running
+            print(f"[meeting] Meeting minutes disabled ({e}). Run: pip install -r requirements.txt")
+            self.meeting = _NoMeeting(str(e))
         wake = "|".join(map(re.escape, CFG.get("wake_words", ["jarvis"])))
         self.wake_re = re.compile(rf"\b(?:hey |okay |ok )?(?:{wake})\b[,.!?]?\s*")
 
@@ -434,7 +457,7 @@ class Jarvis:
             self.meeting.start()
         except Exception as e:
             print(f"[meeting] {e}")
-            return self.say("I couldn't access the audio devices. Install soundcard with pip and try again.")
+            return self.say("I couldn't start the meeting recorder. Run pip install -r requirements.txt, then try again.")
         self.on_meeting_change()
         self.say("Meeting notes started. Please let everyone on the call know it's being recorded.")
 

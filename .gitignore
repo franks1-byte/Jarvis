@@ -3,3 +3,4 @@ __pycache__/
 notes.txt
 *.wav
 *.raw
+jarvis_error.log

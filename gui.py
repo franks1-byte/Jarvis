@@ -16,7 +16,20 @@ import threading
 import time
 import tkinter as tk
 
-import jarvis as J
+try:
+    import jarvis as J
+except Exception:                                    # show the real problem instead of closing silently
+    import os
+    import traceback
+    _log = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jarvis_error.log")
+    with open(_log, "w", encoding="utf-8") as _f:
+        _f.write(traceback.format_exc())
+    try:
+        from tkinter import messagebox
+        messagebox.showerror("J.A.R.V.I.S. failed to start", traceback.format_exc()[-1500:])
+    except Exception:
+        pass
+    raise
 
 try:
     import psutil
@@ -697,7 +710,19 @@ def main():
     except Exception:
         pass
     root = tk.Tk()
-    App(root, startup=args.startup)
+    try:
+        App(root, startup=args.startup)
+    except Exception:
+        import os
+        import traceback
+        from tkinter import messagebox
+        err = traceback.format_exc()
+        with open(os.path.join(J.BASE_DIR, "jarvis_error.log"), "w", encoding="utf-8") as f:
+            f.write(err)
+        messagebox.showerror("J.A.R.V.I.S. failed to start", err[-1500:] +
+                             "\n\nSaved to jarvis_error.log. Send this error to get help.")
+        root.destroy()
+        return
     root.mainloop()
 
 
