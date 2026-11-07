@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+notes.txt
+*.wav
+*.raw

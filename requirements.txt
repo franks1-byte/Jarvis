@@ -1,0 +1,11 @@
+SpeechRecognition
+sounddevice
+numpy
+pyttsx3
+psutil
+pillow
+google-genai
+standard-aifc; python_version >= "3.13"
+audioop-lts; python_version >= "3.13"
+soundcard
+pycaw

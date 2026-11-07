@@ -1,0 +1,85 @@
+{
+  "user_title": "master",
+  "wake_words": [
+    "jarvis",
+    "javis",
+    "jervis",
+    "travis",
+    "service"
+  ],
+  "require_wake_word": true,
+  "wake_word_on_start": true,
+  "follow_up_seconds": 8,
+  "language": "en-US",
+  "city": "Malaybalay",
+  "greeting": "Welcome, master.",
+  "startup_report": true,
+  "voice": {
+    "rate": 175,
+    "prefer": [
+      "george",
+      "ryan",
+      "david",
+      "mark"
+    ]
+  },
+  "gemini": {
+    "api_key": "",
+    "model": "gemini-flash-latest"
+  },
+  "apps": {
+    "notepad": "notepad",
+    "calculator": "calc",
+    "paint": "mspaint",
+    "file explorer": "explorer",
+    "files": "explorer",
+    "command prompt": "cmd",
+    "terminal": "wt",
+    "task manager": "taskmgr",
+    "settings": "ms-settings:",
+    "camera": "microsoft.windows.camera:",
+    "microsoft store": "ms-windows-store:",
+    "chrome": "chrome",
+    "edge": "msedge",
+    "vs code": "code",
+    "visual studio code": "code",
+    "spotify": "spotify:"
+  },
+  "websites": {
+    "youtube": "https://www.youtube.com",
+    "google": "https://www.google.com",
+    "facebook": "https://www.facebook.com",
+    "messenger": "https://www.messenger.com",
+    "gmail": "https://mail.google.com",
+    "github": "https://github.com",
+    "gemini": "https://gemini.google.com",
+    "tiktok": "https://www.tiktok.com",
+    "google classroom": "https://classroom.google.com",
+    "classroom": "https://classroom.google.com",
+    "roblox": "https://www.roblox.com"
+  },
+  "process_names": {
+    "chrome": "chrome.exe",
+    "edge": "msedge.exe",
+    "notepad": "notepad.exe",
+    "spotify": "Spotify.exe",
+    "discord": "Discord.exe",
+    "roblox studio": "RobloxStudioBeta.exe",
+    "roblox": "RobloxPlayerBeta.exe",
+    "blender": "blender.exe",
+    "vs code": "Code.exe",
+    "code": "Code.exe",
+    "intellij": "idea64.exe",
+    "paint": "mspaint.exe",
+    "calculator": "CalculatorApp.exe"
+  },
+  "owner_name": "John",
+  "meeting": {
+    "detect_discord_calls": true,
+    "auto_start": false,
+    "auto_stop_when_call_ends": true,
+    "minutes_language": "English",
+    "transcribe_language": "en-US",
+    "keep_audio": true
+  }
+}
