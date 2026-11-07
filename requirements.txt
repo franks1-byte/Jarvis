@@ -11,3 +11,4 @@ soundcard
 pycaw
 python-docx
 edge-tts
+spotipy

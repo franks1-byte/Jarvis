@@ -23,6 +23,8 @@ import urllib.parse
 import urllib.request
 import webbrowser
 
+import creator
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IS_WIN = os.name == "nt"
 
@@ -310,6 +312,14 @@ class Brain:
         except Exception as e:
             print(f"[ai] Gemini not available: {e}")
 
+    def write(self, prompt, json_mode=False):
+        """Long-form generation (emails, documents, playlists)."""
+        if not self.client:
+            raise RuntimeError("no Gemini API key")
+        from google.genai import types
+        cfg = types.GenerateContentConfig(response_mime_type="application/json") if json_mode else None
+        return self.client.models.generate_content(model=self.model, contents=prompt, config=cfg).text or ""
+
     def ask(self, question):
         if not self.chat:
             return None
@@ -441,6 +451,10 @@ class Jarvis:
             (r"^(goodbye|bye|exit|quit|go offline|stop listening|turn yourself off)\b", self.cmd_exit),
             (r"^(hi|hello|hey|good (morning|afternoon|evening))\b", self.cmd_hello),
             (r"(who are you|what are you|your name)", self.cmd_whoami),
+            (r"^(?:create|make|build|generate|give me|put together)\b.*\bplaylist\b", self.cmd_playlist),
+            (r"^(?:write|create|compose|draft|make|send|prepare)(?: me)?(?: an?| the)? (?:e-?mail|mail|gmail)\b", self.cmd_email),
+            (r"^(?:write|create|make|generate|draft|prepare)(?: me)?(?: an?| the| my)? (?:word |google )?"
+             r"(?:doc|docs|document|docx|report|essay|letter|article|reviewer|summary|outline|reflection paper)\b", self.cmd_document),
             (r"(?:change|switch|use)(?: your| the)? voice(?: to)?(?: (\w+))?", self.cmd_voice),
             (r"(list|what) (?:are )?(?:your |the )?voices", self.cmd_voice_list),
             (r"^(?:start|begin) (?:the |a |my )?(?:meeting|minutes|taking notes)\b|^record (?:the |this |my )?(?:meeting|call)\b|^take meeting notes", self.cmd_meeting_start),
@@ -462,7 +476,7 @@ class Jarvis:
             (r"^(pause|resume|play)( the)?( music| song| video)?$", lambda m, t: press(VK["play_pause"])),
             (r"^(next|skip)( song| track)?$", lambda m, t: press(VK["next"])),
             (r"^(previous|back)( song| track)?$", lambda m, t: press(VK["prev"])),
-            (r"^play (.+?)(?: on youtube)?$", self.cmd_play_youtube),
+            (r"^(?:play|watch)(?: me)?(?: a| the)?(?: video| song| music video| clip)?(?: of| about| called)? (.+?)(?: on youtube| video)?$", self.cmd_play_youtube),
             (r"(?:search youtube for|youtube search) (.+)|search (.+) on youtube", self.cmd_search_youtube),
             (r"^(?:search(?: for)?|google|look up) (.+)", self.cmd_search),
             (r"^(?:open|launch|start|run) (.+)", self.cmd_open),
@@ -665,7 +679,8 @@ class Jarvis:
         self.say("I am JARVIS. Just A Rather Very Intelligent System. At your service.")
 
     def cmd_help(self, m, t):
-        self.say("I can open or close apps and websites, take meeting minutes, play music on YouTube, search the web, "
+        self.say("I can open or close apps and websites, play YouTube videos, make playlists, write emails and documents, "
+                 "take meeting minutes, search the web, "
                  "tell the time, date and weather, set timers and reminders, take notes, control volume, "
                  "take screenshots, report system status, lock or shut down the PC, and answer questions.")
 
@@ -766,18 +781,101 @@ class Jarvis:
         self.say(f"Searching YouTube for {q}.", wait=False)
 
     def cmd_play_youtube(self, m, t):
-        q = m.group(1)
-        url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote(q)
+        q = m.group(1).strip()
+        url = creator.play_youtube(q)
+        self.say(f"Playing {q} on YouTube." if "watch?v=" in url else f"Here are the YouTube results for {q}.",
+                 wait=False)
+
+    # ── creators ──
+    def show(self, title, text):
+        """Show a result card (GUI overrides this)."""
+        print(f"\n{title}\n{text}\n")
+
+    def _need_gemini(self, what):
+        if self.brain.client:
+            return False
+        self.say(f"I need a Gemini API key to {what}. Add it in config dot json.")
+        return True
+
+    def cmd_playlist(self, m, t):
+        platform = "spotify" if "spotify" in t else "youtube"
+        n = re.search(r"\b(\d{1,2}) (?:songs|tracks|videos)\b", t)
+        count = max(3, min(int(n.group(1)), 50)) if n else 15
+        req = re.sub(r"^(create|make|build|generate|give me|put together)( me)?( a| an| my)?", "", t)
+        req = re.sub(r"\b(on|in|for) (spotify|youtube( music)?)\b|\b(spotify|youtube)\b|\b\d{1,2} (songs|tracks|videos)\b|\bplaylist\b", " ", req)
+        req = re.sub(r"^\s*(of|for|with|about|that has)\s+", "", re.sub(r"\s+", " ", req).strip(" ,.")) or "popular hits"
+        self.say(f"Building a {platform} playlist of {req}. One moment.", wait=False)
+
+        name, songs = f"{req.title()} Mix", None
+        if self.brain.client:
+            try:
+                name, songs = creator.pick_songs(self.brain, req, count)
+            except Exception as e:
+                print(f"[playlist] Gemini song pick failed: {e}")
+
+        if platform == "spotify":
+            if not songs:
+                self.say("I need Gemini to pick songs for Spotify, so I'll build it on YouTube instead.")
+            else:
+                try:
+                    url, added, missing = creator.build_spotify_playlist(CFG, name, songs, BASE_DIR)
+                    webbrowser.open(url)
+                    path = creator.save_playlist_file(name, [(f"{s['title']} — {s.get('artist', '')}", None)
+                                                             for s in songs], url, "Spotify")
+                    self.show(f"🎵 {name} (Spotify)", "\n".join(f"{i}. {s['title']} — {s.get('artist', '')}"
+                                                                for i, s in enumerate(songs, 1))
+                              + (f"\n\nNot found on Spotify: {', '.join(missing)}" if missing else "")
+                              + f"\n\nSaved list: {path}")
+                    return self.say(f"Done. {name} is in your Spotify library with {added} songs.")
+                except PermissionError:
+                    self.say("Spotify isn't connected yet, so I'll make it on YouTube. The readme shows how to connect it.")
+                except Exception as e:
+                    print(f"[spotify] {e}")
+                    self.say("Spotify had a problem, so I'll make it on YouTube instead.")
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en"})
-            html = urllib.request.urlopen(req, timeout=8).read().decode("utf-8", "ignore")
-            vid = re.search(r'"videoId":"([\w-]{11})"', html)
-            if vid:
-                url = f"https://www.youtube.com/watch?v={vid.group(1)}"
-        except Exception:
-            pass
+            url, found = creator.build_youtube_playlist(songs=songs, query=None if songs else req, count=count)
+        except Exception as e:
+            print(f"[playlist] {e}")
+            return self.say("I couldn't reach YouTube to build the playlist.")
         webbrowser.open(url)
-        self.say(f"Playing {q}.", wait=False)
+        path = creator.save_playlist_file(name, found, url, "YouTube")
+        self.show(f"🎵 {name}", "\n".join(f"{i}. {label}" for i, (label, _) in enumerate(found, 1))
+                  + f"\n\nSaved list: {path}")
+        self.say(f"Here's your playlist, {name}, with {len(found)} songs. Click save on YouTube to keep it.")
+
+    def cmd_email(self, m, t):
+        client = CFG.get("email_client", "gmail")
+        app = {"gmail": "Gmail", "outlook": "Outlook"}.get(client, "your mail app")
+        if self.brain.client:
+            self.say("Drafting your email now.", wait=False)
+        try:
+            draft = creator.draft_email(self.brain, t, CFG.get("owner_name", ""), CFG.get("contacts", {}))
+        except Exception as e:
+            print(f"[email] {e}")
+            return self.say("Sorry, I couldn't write that email.")
+        creator.open_email(draft, client)
+        self.show("✉️ Email draft", f"To: {draft['to'] or '(add the recipient)'}\nSubject: {draft['subject']}\n\n"
+                  + (draft["body"] or "(empty: add a Gemini key so I can write it for you)"))
+        if not draft["body"]:
+            return self.say(f"I opened a blank email in {app}. Add a Gemini key so I can write it for you.")
+        self.say(f"Your email is ready in {app} for you to review and send."
+                 + ("" if draft["to"] else " Just add the recipient's address."))
+
+    def cmd_document(self, m, t):
+        if self._need_gemini("write documents"):
+            return
+        self.say("Writing your document now. This takes a few seconds.", wait=False)
+        try:
+            title, md = creator.write_document(self.brain, t)
+            path = creator.create_docx(title, md)
+        except Exception as e:
+            print(f"[document] {e}")
+            return self.say("Sorry, I couldn't create that document.")
+        creator.open_file(path)
+        self.show(f"📄 {title}", f"Word document saved and opened:\nDocuments › Jarvis Docs › {os.path.basename(path)}"
+                  + ("\n\nTip: upload it to Google Drive and choose Open with Google Docs." if "google" in t else ""))
+        self.say(f"Done. {title} is open in Word." + (" Upload it to Google Drive to edit it in Google Docs."
+                                                     if "google" in t else ""))
 
     def cmd_screenshot(self, m, t):
         try:

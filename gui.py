@@ -98,6 +98,9 @@ class GuiJarvis(J.Jarvis):
         self.say(f"Going offline. Goodbye, {J.TITLE}.")
         self.ui.ui_q.put(("quit",))
 
+    def show(self, title, text):
+        self.ui.post("card", f"{title}\n\n{text}")
+
     def on_meeting_change(self):
         self.ui.ui_q.put(("toggles",))
         self.ui.ui_q.put(("banner", False))
@@ -269,6 +272,9 @@ class App:
         self.log.tag_configure("b_you", foreground=WHITE)
         self.log.tag_configure("b_system", foreground=MUTED, font=("Segoe UI", 10, "italic"))
         self.log.tag_configure("h_minutes", foreground=AMBER, font=("Consolas", 9, "bold"), spacing1=12)
+        self.log.tag_configure("h_card", foreground=CYAN, font=("Consolas", 9, "bold"), spacing1=12)
+        self.log.tag_configure("b_card", foreground=TEXT, background=PANEL2, lmargin1=10, lmargin2=10,
+                               rmargin=10, spacing1=1, spacing3=1, font=("Segoe UI", 10))
         self.log.tag_configure("b_minutes", foreground=TEXT, background=PANEL2, lmargin1=10, lmargin2=10,
                                rmargin=10, spacing1=1, spacing3=1, font=("Segoe UI", 10))
 
@@ -337,7 +343,7 @@ class App:
             self.root.after(40, self._pump)
 
     def _append(self, who, text):
-        name = {"jarvis": "JARVIS", "you": "YOU", "system": "SYSTEM", "minutes": "JARVIS · MEETING"}[who]
+        name = {"jarvis": "JARVIS", "you": "YOU", "system": "SYSTEM", "minutes": "JARVIS · MEETING", "card": "JARVIS"}[who]
         stamp = datetime.datetime.now().strftime("%H:%M")
         self.log.configure(state="normal")
         self.log.insert("end", f"{name}  ·  {stamp}\n", f"h_{who}")

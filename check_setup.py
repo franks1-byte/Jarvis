@@ -21,7 +21,8 @@ PACKAGES = [
     ("google.genai", "google-genai", "Gemini AI answers and meeting summaries"),
     ("soundcard", "soundcard", "meeting recording"),
     ("pycaw", "pycaw", "Discord call detection"),
-    ("docx", "python-docx", "Word document for meeting minutes"),
+    ("docx", "python-docx", "Word documents (docs + meeting minutes)"),
+    ("spotipy", "spotipy", "Spotify playlists"),
 ]
 
 

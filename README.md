@@ -51,6 +51,31 @@ Sugdi sa **"Jarvis"**. Human sa usa ka command, 8 seconds nga dili na kinahangla
 | Jarvis, goodbye | Mo-offline |
 | Bisan unsang pangutana | Tubagon sa Gemini AI (tan-awa ubos) |
 
+### ▶️ YouTube, 🎵 Playlists, ✉️ Email, 📄 Docs
+
+| Isulti / i-type | Buhaton ni Jarvis |
+|---|---|
+| *play Buwan by Juan Karlos* / *watch the Avengers trailer* | Moabli ug mo-play dayon sa YouTube |
+| *create a playlist of chill OPM songs* | YouTube playlist (instant, walay login) |
+| *make a 20 songs workout playlist* | Pwede nimo isulti pila ka kanta (max 50) |
+| *make a Spotify playlist for studying* | Tinuod nga playlist sa imong Spotify account (setup sa ubos) |
+| *write an email to my professor asking for an extension* | Si Gemini mosulat, moabli sa Gmail para imong i-review ug i-send |
+| *draft an email to name@school.edu about our project* | Automatic ma-fill ang "To" |
+| *create a document about the history of science* | Word file sa `Documents\Jarvis Docs`, automatic moabli |
+| *write an essay / report / letter / reviewer about …* | Parehas, Word file |
+
+- **Playlists:** si Gemini ang mopili sa mga kanta. Kung walay Gemini key, ang top YouTube results ang gamiton. Ang lista ma-save sa `Documents\Jarvis Playlists`. Sa YouTube, i-click ang **Save** aron ma-keep ang playlist.
+- **Email:** dili gyud mo-send si Jarvis nga wala nimo makita. Moabli ra ang draft. Para Outlook, ilisi ang `"email_client"` sa `config.json` ngadto sa `"outlook"`, o `"default"` para sa imong mail app.
+- **Contacts:** idugang sa `config.json` → `"contacts": { "mama": "mama@gmail.com", "professor": "prof@liceo.edu.ph" }`. Dayon pwede na ang *"write an email to mama …"*.
+- **Google Docs:** Word file ang himoon. I-upload sa Google Drive, dayon **Open with → Google Docs**.
+- Kinahanglan ang **Gemini API key** sa email ug docs content.
+
+#### 🟢 I-connect ang Spotify (isa ra ka higayon)
+1. Adto sa https://developer.spotify.com/dashboard → **Create app**.
+2. Redirect URI: `http://127.0.0.1:8888/callback`. I-check ang **Web API**.
+3. Kopyaha ang **Client ID** ug **Client Secret** ngadto sa `config.json` → `"spotify"`.
+4. Sa unang Spotify playlist, moabli ang browser para mo-login ka ug mo-Agree. Human ana, automatic na.
+
 ### 📋 Meeting Minutes (Discord, Zoom, Google Meet…)
 Gi-record ni Jarvis ang **imong mic** ug ang **tingog sa imong mga kauban** (bisan unsa nga madungog sa imong speakers o headset). Human sa meeting, si Gemini ang mosulat sa minutes.
 

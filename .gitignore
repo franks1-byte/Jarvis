@@ -5,3 +5,4 @@ notes.txt
 *.raw
 jarvis_error.log
 voice_cache/
+.spotify_token
