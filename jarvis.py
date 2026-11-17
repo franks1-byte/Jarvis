@@ -962,7 +962,10 @@ class Jarvis:
         elif action == "restart":
             subprocess.Popen(["shutdown", "/r", "/t", "0"], creationflags=flags)
         elif action == "sleep":
-            ctypes.windll.powrprof.SetSuspendState(False, True, False)
+            ok = ctypes.windll.powrprof.SetSuspendState(False, True, False)
+            if not ok:                      # Modern Standby laptops: screen off puts them into standby
+                ctypes.windll.user32.LockWorkStation()
+                ctypes.windll.user32.SendMessageW(0xFFFF, 0x0112, 0xF170, 2)
 
     def cmd_phone(self, m, t):
         if not self.remote or not self.remote.httpd:
