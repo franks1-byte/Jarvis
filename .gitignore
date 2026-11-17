@@ -6,3 +6,4 @@ notes.txt
 jarvis_error.log
 voice_cache/
 .spotify_token
+.brightness_restore

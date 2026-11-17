@@ -468,6 +468,21 @@ def last_input_tick():
     return info.dwTime
 
 
+_BRIGHTNESS_FILE = os.path.join(BASE_DIR, ".brightness_restore")
+
+
+def restore_brightness_if_needed():
+    """If Jarvis was closed/crashed while the screen was dark, bring the brightness back on startup."""
+    try:
+        with open(_BRIGHTNESS_FILE) as f:
+            value = int(f.read().strip() or 70)
+        set_brightness(max(value, 30))
+        os.remove(_BRIGHTNESS_FILE)
+        print(f"[screen] restored brightness to {value}%")
+    except (OSError, ValueError):
+        pass
+
+
 class ScreenOffMode:
     """Looks off (locked, 0% brightness) but stays awake, so the iPhone and the wake word still reach Jarvis.
     Needed on laptops that can't be woken from sleep over Wi-Fi."""
@@ -481,8 +496,14 @@ class ScreenOffMode:
     def enter(self):
         if self.active or not IS_WIN:
             return
-        self.saved = get_brightness() or 70
+        self.saved = max(get_brightness() or 70, 30)
+        try:
+            with open(_BRIGHTNESS_FILE, "w") as f:
+                f.write(str(self.saved))
+        except OSError:
+            pass
         self.active = True
+        self._since = time.time()
         self._dim_tick = None
         self._ev = threading.Event()
         threading.Thread(target=self._hold, args=(self._ev,), daemon=True).start()
@@ -496,7 +517,16 @@ class ScreenOffMode:
         k = ctypes.windll.kernel32
         k.SetThreadExecutionState(0x80000003)          # system + display required: no Modern Standby
         try:
+            last = time.time()
             while not ev.wait(3):
+                now = time.time()
+                if now - last > 20:                     # the laptop slept (power button / lid): restore on resume
+                    self.exit(jiggle=False)
+                    break
+                last = now
+                if now - self._since > 4 * 3600:        # safety: never stay dark longer than 4 hours
+                    self.exit(jiggle=False)
+                    break
                 if self._dim_tick is not None and last_input_tick() != self._dim_tick:
                     self.exit(jiggle=False)            # you touched the keyboard/mouse: restore the screen
                     break
@@ -516,6 +546,10 @@ class ScreenOffMode:
             return
         self.active = False
         set_brightness(self.saved)
+        try:
+            os.remove(_BRIGHTNESS_FILE)
+        except OSError:
+            pass
         if jiggle and IS_WIN:
             ctypes.windll.user32.mouse_event(1, 1, 0, 0, 0)
             ctypes.windll.user32.mouse_event(1, -1, 0, 0, 0)
@@ -534,6 +568,8 @@ class Jarvis:
         self._capture = None
         self._handle_lock = threading.RLock()
         self.dark = ScreenOffMode()
+        if IS_WIN:
+            threading.Thread(target=restore_brightness_if_needed, daemon=True).start()
         self.remote = None
         try:
             from meeting import MeetingRecorder
