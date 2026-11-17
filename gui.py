@@ -101,6 +101,10 @@ class GuiJarvis(J.Jarvis):
     def show(self, title, text):
         self.ui.post("card", f"{title}\n\n{text}")
 
+    def cmd_phone(self, m, t):
+        self.ui.root.after(0, self.ui.show_phone)
+        self.say("Scan the QR code with your iPhone camera to connect.")
+
     def on_meeting_change(self):
         self.ui.ui_q.put(("toggles",))
         self.ui.ui_q.put(("banner", False))
@@ -148,6 +152,7 @@ class App:
         self._build()
         self.voice = GuiVoice(self)
         self.jarvis = GuiJarvis(self.voice, self)
+        J.start_remote(self.jarvis, self._remote_run, lambda kind, text: self.post("you", text))
 
         threading.Thread(target=self._boot, args=(startup,), daemon=True).start()
         threading.Thread(target=self._command_worker, daemon=True).start()
@@ -207,6 +212,7 @@ class App:
         toggles.pack(pady=(8, 0))
         self.wake_btn = self._toggle(toggles, self.toggle_wake)
         self.voice_btn = self._toggle(toggles, self.toggle_voice)
+        self.phone_btn = self._toggle(toggles, self.show_phone)
         self.meet_btn = tk.Label(hud, bg=PANEL2, font=("Consolas", 10, "bold"), padx=16, pady=7, cursor="hand2")
         self.meet_btn.pack(pady=(8, 0))
         self.meet_btn.bind("<Button-1>", lambda e: self.toggle_meeting())
@@ -296,6 +302,7 @@ class App:
         for btn, name, on in ((self.wake_btn, "WAKE WORD", self.wake_enabled),
                               (self.voice_btn, "VOICE", self.voice_enabled)):
             btn.configure(text=f"{name}  ● {'ON' if on else 'OFF'}", fg=GREEN if on else MUTED)
+        self.phone_btn.configure(text="📱 PHONE", fg=CYAN)
         mtg = getattr(getattr(self, "jarvis", None), "meeting", None)
         if mtg and mtg.active:
             e = int(mtg.elapsed())
@@ -546,7 +553,11 @@ class App:
     def _command_worker(self):
         while self.alive:
             item = self.cmd_q.get()
+            box = None
+            if isinstance(item, tuple):                 # ("remote", text, reply_queue) from the iPhone
+                _, item, box = item
             self.busy = True
+            replies = []
             try:
                 if item == "__startup__":
                     self.jarvis.startup_greeting()
@@ -554,10 +565,16 @@ class App:
                     self.jarvis.say(f"JARVIS online. {J.greeting_for_hour()}, {J.TITLE}.")
                 else:
                     self.set_state("thinking")
-                    self.jarvis.handle(item)
+                    if box is not None:
+                        replies = self.jarvis.run_captured(item)
+                    else:
+                        self.jarvis.handle(item)
             except Exception as e:
                 self.post("system", f"Error: {e}")
+                replies = [f"Sorry, something went wrong: {e}"]
             finally:
+                if box is not None:
+                    box.put(replies)
                 self.voice.wait_until_quiet()
                 self.busy = False
                 if item.startswith("__"):
@@ -566,6 +583,80 @@ class App:
                 else:
                     self.jarvis.awake_until = time.time() + J.CFG.get("follow_up_seconds", 8)
                     self.set_state("listening" if (self.wake_enabled and self.mic_ok) else "idle")
+
+    # ── iPhone remote ──
+    def _remote_run(self, text, timeout):
+        box = queue.Queue()
+        self.cmd_q.put(("remote", text, box))
+        try:
+            return box.get(timeout=timeout)
+        except queue.Empty:
+            return [f"Working on it, {J.TITLE}."]
+
+    def show_phone(self):
+        srv = self.jarvis.remote
+        win = tk.Toplevel(self.root)
+        win.title("J.A.R.V.I.S. — iPhone Remote")
+        win.configure(bg=BG)
+        win.resizable(False, False)
+        win.transient(self.root)
+        tk.Label(win, text="IPHONE REMOTE", bg=BG, fg=CYAN, font=("Consolas", 12, "bold")).pack(pady=(18, 2))
+        if not srv or not srv.httpd:
+            reason = getattr(srv, "error", None) or "it's turned off in config.json (remote → enabled)"
+            tk.Label(win, text=f"The phone remote isn't running: {reason}", bg=BG, fg=AMBER,
+                     font=("Segoe UI", 10), wraplength=360, justify="left").pack(padx=24, pady=20)
+            return
+        import remote as R
+        net = R.network_info()
+        url = srv.panel_url(net["ip"])
+        tk.Label(win, text="Scan with the iPhone Camera (same Wi-Fi as this laptop)", bg=BG, fg=MUTED,
+                 font=("Segoe UI", 9)).pack()
+        try:
+            import qrcode
+            from PIL import ImageTk
+            qr = qrcode.QRCode(box_size=6, border=2)
+            qr.add_data(url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            img = img.get_image() if hasattr(img, "get_image") else getattr(img, "_img", img)
+            photo = ImageTk.PhotoImage(img.convert("RGB"))
+            lbl = tk.Label(win, image=photo, bg=BG)
+            lbl.image = photo
+            lbl.pack(pady=12)
+        except Exception as e:
+            tk.Label(win, text=f"(QR code needs the qrcode package: {e})", bg=BG, fg=MUTED,
+                     font=("Segoe UI", 9)).pack(pady=8)
+        e = tk.Entry(win, bg=PANEL2, fg=TEXT, font=("Consolas", 10), bd=0, justify="center",
+                     readonlybackground=PANEL2, highlightthickness=1, highlightbackground=LINE)
+        e.insert(0, url)
+        e.configure(state="readonly")
+        e.pack(fill="x", padx=24, ipady=6)
+        copy = tk.Label(win, text="COPY LINK", bg=PANEL2, fg=CYAN, font=("Consolas", 9, "bold"),
+                        padx=12, pady=5, cursor="hand2")
+        copy.pack(pady=(8, 0))
+
+        def do_copy(_=None):
+            self.root.clipboard_clear()
+            self.root.clipboard_append(url)
+            copy.configure(text="COPIED ✓")
+        copy.bind("<Button-1>", do_copy)
+
+        eth = next((a for a in net["adapters"] if a["kind"] == "ethernet"), None)
+        steps = ("1. Open the link on your iPhone, then Share → Add to Home Screen.\n"
+                 "2. To turn the laptop ON: install the free “Wake Me Up – Wake-on-LAN” app\n"
+                 "    and add a device with the MAC address below.\n"
+                 "3. Run Enable_Wake_On_LAN.bat on this laptop once (as admin).")
+        tk.Label(win, text=steps, bg=BG, fg=TEXT, font=("Segoe UI", 9), justify="left").pack(padx=24, pady=(14, 6),
+                                                                                            anchor="w")
+        pick = eth or net["active"] or (net["adapters"][0] if net["adapters"] else None)
+        if pick:
+            tk.Label(win, text=f"MAC  {pick['mac']}   ·   BROADCAST  {pick['broadcast'] or '—'}   ·   PORT  9",
+                     bg=BG, fg=CYAN, font=("Consolas", 9)).pack(padx=24, anchor="w")
+        warn = ("Wake works best with the Ethernet cable and charger plugged in."
+                if eth else "No Ethernet port found: most laptops can't wake from Shutdown over Wi-Fi. "
+                            "Use “Jarvis, sleep my laptop” instead.")
+        tk.Label(win, text=warn, bg=BG, fg=AMBER, font=("Segoe UI", 9), wraplength=380,
+                 justify="left").pack(padx=24, pady=(6, 20), anchor="w")
 
     # ── clock & stats ──
     def _tick_clock(self):

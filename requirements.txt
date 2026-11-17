@@ -12,3 +12,4 @@ pycaw
 python-docx
 edge-tts
 spotipy
+qrcode

@@ -23,6 +23,7 @@ PACKAGES = [
     ("pycaw", "pycaw", "Discord call detection"),
     ("docx", "python-docx", "Word documents (docs + meeting minutes)"),
     ("spotipy", "spotipy", "Spotify playlists"),
+    ("qrcode", "qrcode", "QR code for the iPhone remote"),
 ]
 
 

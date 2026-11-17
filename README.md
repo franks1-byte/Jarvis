@@ -45,8 +45,11 @@ Sugdi sa **"Jarvis"**. Human sa usa ka command, 8 seconds nga dili na kinahangla
 | Jarvis, pause / next / previous | Music controls |
 | Jarvis, take a screenshot | Mo-save sa Pictures\Jarvis Screenshots |
 | Jarvis, system status | CPU, RAM, battery |
-| Jarvis, lock the computer | Lock |
-| Jarvis, shut down / restart the computer | Mangutana una "Are you sure?" |
+| Jarvis, lock my laptop | Lock |
+| Jarvis, shutdown my laptop / turn off my laptop | **Mopalong dayon** (walay pangutana) |
+| Jarvis, restart my laptop / sleep my laptop | Restart / Sleep dayon |
+| Jarvis, cancel shutdown | I-cancel ang shutdown |
+| Jarvis, phone remote | Ipakita ang QR code para sa iPhone |
 | Jarvis, tell me a joke / flip a coin / roll a dice | Fun |
 | Jarvis, goodbye | Mo-offline |
 | Bisan unsang pangutana | Tubagon sa Gemini AI (tan-awa ubos) |
@@ -143,11 +146,66 @@ Para i-mute: i-click ang **VOICE ● ON** sa window.
 ### Problema?
 - **Wala kadungog** → check sa Windows Sound settings nga sakto ang default mic. Hilom una pag-start (nag-calibrate siya sa saba).
 - **"Can't reach speech service"** → kinahanglan og internet ang voice recognition.
+- **Dili maka-connect ang iPhone** → parehas ba og Wi-Fi? Sa Windows: Settings → Network → imong Wi-Fi → **Private network**. I-allow ang Python sa Windows Firewall.
 - **Wala'y tingog** → i-check nga ON ang **VOICE** button ug naa'y sound ang speakers. I-run ang `Jarvis.bat` para ma-install ang `edge-tts`.
 
 ---
 
-## 📱 PART 2 — iPhone (Siri Shortcuts)
+## 📱 PART 2 — iPhone
+
+### ⚡ Jarvis Remote: i-ON ug i-OFF ang laptop gikan sa iPhone
+
+> Kinahanglan nga **parehas og Wi-Fi** ang iPhone ug ang laptop.
+> Gusto nimo nga ma-shutdown dayon nga walay "Are you sure?"? Default na kana. Kung gusto nimo og pangutana, i-set ang `"confirm_power": true` sa `config.json`.
+
+#### 1) Control panel sa iPhone (Lock · Sleep · Restart · Shutdown · Commands)
+1. Sa Jarvis window, i-click ang **📱 PHONE**. Mogawas ang QR code.
+2. I-scan gamit ang **iPhone Camera** ug ablihi ang link.
+3. Sa Safari: **Share ⬆︎ → Add to Home Screen**. Mahimo na ni nga "Jarvis" app sa imong Home Screen.
+4. Sa unang run, mangutana ang Windows Firewall. I-check ang **Private networks** ug i-click ang **Allow**.
+
+Sa panel, kaduha i-tap ang Shutdown, Restart, o Sleep para dili ma-accidental. Pwede pud ka mo-type og command (pananglitan *"open youtube"*, *"what time is it"*), ug ang tubag ni Jarvis mogawas sa phone.
+
+#### 2) I-ON ang laptop gikan sa iPhone (Wake-on-LAN)
+Kung patay ang laptop, wala na si Jarvis, so ang iPhone mismo ang mopadala og "magic packet" aron mo-on ang laptop.
+
+**Sa laptop (isa ra ka higayon):**
+1. Right-click sa **`Enable_Wake_On_LAN.bat` → Run**, dayon i-click ang Yes. Iyang:
+   - i-off ang Fast Startup,
+   - i-on ang Wake-on-LAN sa network adapter,
+   - ug ipakita ang imong MAC address.
+2. **BIOS:** i-restart ang laptop, pindota ang F2, F10, F12 o Del samtang nag-boot, dayon i-enable ang **Wake on LAN**. Mahimong lain ang ngalan, sama sa *Power On by PCI-E* o *Wake from S4/S5*. Kini nga step, ikaw ra gyud ang makahimo.
+3. Kung i-shutdown nimo ang laptop, kinahanglan **naka-plug ang charger ug Ethernet cable**.
+
+**Sa iPhone:**
+1. I-install ang libre nga app nga **Wake Me Up – Wake-on-LAN** gikan sa App Store.
+2. Add device. Gamita ang **MAC address**, **Broadcast address**, ug **Port 9** nga makita sa **📱 PHONE** window o sa phone panel (⚡ setup).
+3. I-test: i-shutdown ang laptop, dayon i-tap ang device sa app.
+
+> ⚠️ **Importante:** Kadaghanan sa laptops **dili mo-on gikan sa Shutdown kung Wi-Fi ra**. Ethernet cable ang kinahanglan. Kung walay Ethernet port ang imong laptop, gamita ang **"Jarvis, sleep my laptop"** imbes nga shutdown. Ang ubang laptops mo-wake gikan sa sleep pinaagi sa Wi-Fi. O mopalit og USB-to-Ethernet adapter nga naay Wake-on-LAN.
+
+#### 3) Himoang tinuod nga "app" + Siri: ang **Jarvis Remote** Shortcut
+Shortcuts app → **+** → ngalan: **Jarvis Remote** → idugang kini nga mga action:
+
+1. **Choose from Menu** nga naay: `⚡ Turn ON`, `⏻ Shutdown`, `🌙 Sleep`, `🔒 Lock`, `🔄 Restart`, `🎙️ Command`
+2. Sa **⚡ Turn ON**: idugang ang action sa **Wake Me Up** app (pangitaa ang "Wake Me Up" sa action search), dayon pili-a ang imong laptop. Sunod, **Speak Text**: `Waking up your laptop, master.`
+3. Sa **⏻ Shutdown**: **Get Contents of URL**, i-paste ang *SHUTDOWN* link gikan sa phone panel (🔗 Links), dayon **Speak Text** → *Contents of URL*.
+4. Parehas sa **Sleep**, **Lock**, ug **Restart**, gamit ang ilang tagsa-tagsa ka link.
+5. Sa **🎙️ Command**:
+   - **Dictate Text**
+   - **URL Encode**
+   - **Text**: i-paste ang *COMMAND* link, dayon idugang ang *URL Encoded Text* sa katapusan
+   - **Get Contents of URL**
+   - **Speak Text**
+6. **Share → Add to Home Screen** → pili-i og icon. Mahimo na ni nga Jarvis app nga mo-on ug mo-off sa imong laptop.
+
+Siri: *"Hey Siri, Jarvis Remote"*. Pwede pud ka maghimo og tagsa-tagsa ka shortcut, pananglitan **Wake Laptop** ug **Shutdown Laptop**, para *"Hey Siri, wake laptop"*.
+
+> 💡 Kung mausab ang IP sa laptop (pananglitan `192.168.1.5` → `.7`), dili na mo-work ang mga link. Para dili mausab, i-set og **DHCP reservation** sa imong router. O i-click balik ang **📱 PHONE** para makita ang bag-ong link.
+
+---
+
+### Uban pang iPhone Shortcuts
 
 Dili pwede mag-run og Python app sa iPhone, pero mahimo nato si Jarvis gamit **Shortcuts** app ug Siri.
 

@@ -95,5 +95,11 @@
     "client_id": "",
     "client_secret": "",
     "redirect_uri": "http://127.0.0.1:8888/callback"
+  },
+  "confirm_power": false,
+  "remote": {
+    "enabled": true,
+    "port": 8765,
+    "token": ""
   }
 }

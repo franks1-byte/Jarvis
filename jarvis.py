@@ -332,6 +332,10 @@ class Brain:
 
 
 # ─────────────────────────── HELPERS ──────────────────────────────────────────
+# "shutdown", "shut down my laptop", "jarvis turn off the pc now", "power off the computer please"
+_POWER_RE = (r"^(?:please )?(?:{verb})(?: (?:the |my |this )?(?:pc|computer|laptop|system|device))?"
+             r"(?: now| please| right now)*$|\b(?:{verb}) (?:the |my |this )?(?:pc|computer|laptop|system)\b")
+
 VK = {"vol_up": 0xAF, "vol_down": 0xAE, "mute": 0xAD,
       "play_pause": 0xB3, "next": 0xB0, "prev": 0xB1}
 
@@ -437,6 +441,9 @@ class Jarvis:
         self.brain = Brain()
         self.running = True
         self.awake_until = 0.0
+        self._capture = None
+        self._handle_lock = threading.RLock()
+        self.remote = None
         try:
             from meeting import MeetingRecorder
             self.meeting = MeetingRecorder(CFG)
@@ -483,10 +490,13 @@ class Jarvis:
             (r"^(?:close|exit|kill) (.+)", self.cmd_close),
             (r"(screenshot|screen shot|capture (the )?screen)", self.cmd_screenshot),
             (r"(system status|system report|battery|cpu|ram|memory usage|how are you)", self.cmd_status),
-            (r"(lock (the |my )?(pc|computer|screen)|lock it)", self.cmd_lock),
-            (r"(shut ?down|turn off) (the |my )?(pc|computer|laptop)", self.cmd_shutdown),
-            (r"restart (the |my )?(pc|computer|laptop)", self.cmd_restart),
-            (r"(sleep mode|put (the |my )?(pc|computer) to sleep)", self.cmd_sleep),
+            (r"\b(cancel|abort|stop) (the )?(shut ?down|restart)\b", lambda m, t: self.power("cancel")),
+            (r"(lock (the |my )?(pc|computer|laptop|screen)|^lock it$|^lock$)", lambda m, t: self.power("lock")),
+            (_POWER_RE.format(verb=r"shut ?down|turn off|power off|switch off|shut off"), lambda m, t: self.power("shutdown")),
+            (_POWER_RE.format(verb=r"restart|reboot"), lambda m, t: self.power("restart")),
+            (r"\bsleep mode\b|^(go to )?sleep$|\b(put|send) (the |my )?(pc|computer|laptop) to sleep\b|"
+             r"\bsleep (the |my )?(pc|computer|laptop)\b", lambda m, t: self.power("sleep")),
+            (r"\b(phone|iphone|mobile) (remote|link|app|control)\b|\bconnect (my )?(phone|iphone)\b", self.cmd_phone),
             (r"(joke|make me laugh)", lambda m, t: self.say(random.choice(JOKES))),
             (r"(flip a coin|coin flip)", lambda m, t: self.say(f"It's {random.choice(['heads', 'tails'])}.")),
             (r"roll a (die|dice)", lambda m, t: self.say(f"You rolled a {random.randint(1, 6)}.")),
@@ -509,7 +519,19 @@ class Jarvis:
         return True, text
 
     def say(self, text, wait=True):
+        if self._capture is not None:
+            self._capture.append(text)
         self.voice.say(text, wait)
+
+    def run_captured(self, text):
+        """Run a command and return what Jarvis said (used by the iPhone remote)."""
+        with self._handle_lock:
+            self._capture = []
+            try:
+                self.handle(text)
+            finally:
+                replies, self._capture = self._capture, None
+        return replies
 
     def ask_user(self, prompt, timeout=6):
         self.say(prompt)
@@ -525,6 +547,10 @@ class Jarvis:
         return bool(re.search(r"\b(yes|yeah|yep|sure|do it|confirm|proceed|affirmative)\b", ans))
 
     def handle(self, text):
+        with self._handle_lock:
+            self._handle(text)
+
+    def _handle(self, text):
         text = re.sub(r"[.!?]+$", "", text.strip().lower())
         if not text:
             return
@@ -902,35 +928,73 @@ class Jarvis:
         except ImportError:
             self.say("Install psutil so I can read system stats.")
 
-    def cmd_lock(self, m, t):
-        self.say("Locking the computer.")
-        if IS_WIN:
-            ctypes.windll.user32.LockWorkStation()
-
-    def cmd_shutdown(self, m, t):
-        if self.confirmed(f"Are you sure you want to shut down, {TITLE}?"):
-            self.say("Shutting down in ten seconds. Goodbye.")
+    def power(self, action, source=None):
+        """Shutdown / restart / sleep / lock / cancel. Immediate unless "confirm_power" is true in config."""
+        by = f" from your {source}" if source else ""
+        if action == "cancel":
             if IS_WIN:
-                subprocess.run(["shutdown", "/s", "/t", "10"])
-        else:
-            self.say("Shutdown cancelled.")
-
-    def cmd_restart(self, m, t):
-        if self.confirmed("Restart the computer?"):
-            self.say("Restarting in ten seconds.")
+                subprocess.run(["shutdown", "/a"], capture_output=True, creationflags=0x08000000)
+            return self.say("Shutdown cancelled.")
+        if action == "lock":
+            self.say(f"Locking the computer{by}.")
             if IS_WIN:
-                subprocess.run(["shutdown", "/r", "/t", "10"])
-        else:
-            self.say("Restart cancelled.")
+                ctypes.windll.user32.LockWorkStation()
+            return
+        if CFG.get("confirm_power", False) and source is None and action in ("shutdown", "restart", "sleep"):
+            if not self.confirmed(f"Are you sure you want to {action}, {TITLE}?"):
+                return self.say(f"{action.capitalize()} cancelled.")
+        if self.meeting.active:                                       # don't lose a meeting recording
+            self.say("Saving your meeting recording first.")
+            try:
+                wav, duration = self.meeting.stop()
+                print(f"[meeting] saved before {action}: {wav}")
+            except Exception as e:
+                print(f"[meeting] {e}")
+        line = {"shutdown": f"Shutting down{by}. Goodbye, {TITLE}.",
+                "restart": f"Restarting{by}. See you in a moment, {TITLE}.",
+                "sleep": f"Going to sleep{by}. Good night, {TITLE}."}[action]
+        self.say(line)                                                # waits until he finishes talking
+        if not IS_WIN:
+            return print(f"[power] (Windows only) would {action} now")
+        flags = 0x08000000
+        if action == "shutdown":
+            subprocess.Popen(["shutdown", "/s", "/t", "0"], creationflags=flags)
+        elif action == "restart":
+            subprocess.Popen(["shutdown", "/r", "/t", "0"], creationflags=flags)
+        elif action == "sleep":
+            ctypes.windll.powrprof.SetSuspendState(False, True, False)
 
-    def cmd_sleep(self, m, t):
-        if self.confirmed("Put the computer to sleep?"):
-            self.say("Good night.")
-            if IS_WIN:
-                subprocess.run(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"])
+    def cmd_phone(self, m, t):
+        if not self.remote or not self.remote.httpd:
+            return self.say("The phone remote is off. Check the remote settings in config dot json.")
+        url = self.remote.panel_url()
+        self.show("📱 iPhone remote", f"Open this on your iPhone (same Wi-Fi):\n{url}\n\n"
+                  "Then Share → Add to Home Screen.")
+        self.say("Open the link on your iPhone while it's on the same Wi-Fi. "
+                 "In the window, click the phone button to scan the QR code.")
 
 
 # ─────────────────────────── MAIN ─────────────────────────────────────────────
+def start_remote(jarvis, run_command, on_event=None):
+    """Start the iPhone remote server (token is created once and saved in config.json)."""
+    rc = CFG.setdefault("remote", {})
+    if not rc.get("enabled", True):
+        return None
+    if not rc.get("token"):
+        import remote as _r
+        rc["token"] = _r.new_token()
+        save_config()
+    try:
+        import remote as _r
+        srv = _r.RemoteServer(jarvis, rc, run_command, on_event)
+        if srv.start():
+            jarvis.remote = srv
+            return srv
+    except Exception as e:
+        print(f"[remote] not started: {e}")
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser(description="J.A.R.V.I.S. voice assistant")
     ap.add_argument("--startup", action="store_true", help="greet like at PC login")
@@ -950,6 +1014,8 @@ def main():
             listener = None
 
     jarvis = Jarvis(voice, listener)
+    if not args.greet_only:
+        start_remote(jarvis, lambda text, timeout: jarvis.run_captured(text))
     if args.startup or args.greet_only:
         jarvis.startup_greeting()
     else:
