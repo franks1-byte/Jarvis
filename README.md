@@ -7,7 +7,8 @@
 2. I-double-click ang **`Jarvis.bat`**.
    - Automatic niya i-check ug i-install ang tanang kulang nga packages. Unang run lang ni, mga 1–3 minutos.
    - Human ana, moabli na ang Jarvis window.
-3. Kung naay problema, i-run ang **`Jarvis_debug.bat`**. Makita didto ang error, i-screenshot ug i-send.
+3. Para i-restart si Jarvis human sa update, i-double-click ang **`Restart_Jarvis.bat`**.
+4. Kung naay problema, i-run ang **`Jarvis_debug.bat`**. Makita didto ang error, i-screenshot ug i-send.
 
 ### 🖥️ Ang Jarvis window
 - **🎙️ Mic button** (o **Ctrl+Space**): i-click, dayon isulti ang command. Mo-green ang reactor samtang naminaw siya ug mosayaw ang mga bar sumala sa imong tingog.
