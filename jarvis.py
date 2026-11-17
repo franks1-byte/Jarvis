@@ -433,6 +433,96 @@ class _NoMeeting:
         raise RuntimeError("not recording")
 
 
+# ─────────────────────────── SCREEN-OFF MODE ──────────────────────────────────
+def _ps(cmd, timeout=15):
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", cmd], capture_output=True, text=True,
+                       creationflags=0x08000000, timeout=timeout)
+    return (r.stdout or "").strip()
+
+
+def get_brightness():
+    try:
+        return int(_ps("(Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness | "
+                       "Select-Object -First 1).CurrentBrightness"))
+    except (ValueError, subprocess.SubprocessError, OSError):
+        return None
+
+
+def set_brightness(value):
+    try:
+        _ps("Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods | Select-Object -First 1 | "
+            f"Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{{Timeout=1; Brightness=[byte]{int(value)}}} | Out-Null")
+    except (subprocess.SubprocessError, OSError) as e:
+        print(f"[brightness] {e}")
+
+
+class _LASTINPUTINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+
+
+def last_input_tick():
+    if not IS_WIN:
+        return 0
+    info = _LASTINPUTINFO(ctypes.sizeof(_LASTINPUTINFO), 0)
+    ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info))
+    return info.dwTime
+
+
+class ScreenOffMode:
+    """Looks off (locked, 0% brightness) but stays awake, so the iPhone and the wake word still reach Jarvis.
+    Needed on laptops that can't be woken from sleep over Wi-Fi."""
+
+    def __init__(self):
+        self.active = False
+        self.saved = 70
+        self._ev = None
+        self._dim_tick = None
+
+    def enter(self):
+        if self.active or not IS_WIN:
+            return
+        self.saved = get_brightness() or 70
+        self.active = True
+        self._dim_tick = None
+        self._ev = threading.Event()
+        threading.Thread(target=self._hold, args=(self._ev,), daemon=True).start()
+        time.sleep(0.3)
+        ctypes.windll.user32.LockWorkStation()
+        time.sleep(1.0)
+        set_brightness(0)
+        self._dim_tick = last_input_tick()
+
+    def _hold(self, ev):
+        k = ctypes.windll.kernel32
+        k.SetThreadExecutionState(0x80000003)          # system + display required: no Modern Standby
+        try:
+            while not ev.wait(3):
+                if self._dim_tick is not None and last_input_tick() != self._dim_tick:
+                    self.exit(jiggle=False)            # you touched the keyboard/mouse: restore the screen
+                    break
+                try:
+                    import psutil
+                    b = psutil.sensors_battery()
+                    if b and not b.power_plugged and b.percent <= 15:
+                        self.exit(jiggle=False)        # protect the battery: let Windows sleep normally
+                        break
+                except Exception:
+                    pass
+        finally:
+            k.SetThreadExecutionState(0x80000000)
+
+    def exit(self, jiggle=True):
+        if not self.active:
+            return
+        self.active = False
+        set_brightness(self.saved)
+        if jiggle and IS_WIN:
+            ctypes.windll.user32.mouse_event(1, 1, 0, 0, 0)
+            ctypes.windll.user32.mouse_event(1, -1, 0, 0, 0)
+        if self._ev:
+            self._ev.set()
+
+
 # ─────────────────────────── JARVIS ───────────────────────────────────────────
 class Jarvis:
     def __init__(self, voice, listener):
@@ -443,6 +533,7 @@ class Jarvis:
         self.awake_until = 0.0
         self._capture = None
         self._handle_lock = threading.RLock()
+        self.dark = ScreenOffMode()
         self.remote = None
         try:
             from meeting import MeetingRecorder
@@ -491,6 +582,10 @@ class Jarvis:
             (r"(screenshot|screen shot|capture (the )?screen)", self.cmd_screenshot),
             (r"(system status|system report|battery|cpu|ram|memory usage|how are you)", self.cmd_status),
             (r"\b(cancel|abort|stop) (the )?(shut ?down|restart)\b", lambda m, t: self.power("cancel")),
+            (r"\b(screen off|go dark|standby mode)\b|\bturn off (the |my )?(screen|display|monitor)\b",
+             lambda m, t: self.power("screenoff")),
+            (r"^(wake up|wake|screen on|wakey wakey)$|\bturn on (the |my )?(screen|display|monitor)\b|"
+             r"\bwake (up )?(the |my )?(pc|computer|laptop|screen)\b", lambda m, t: self.power("wake")),
             (r"(lock (the |my )?(pc|computer|laptop|screen)|^lock it$|^lock$)", lambda m, t: self.power("lock")),
             (_POWER_RE.format(verb=r"shut ?down|turn off|power off|switch off|shut off"), lambda m, t: self.power("shutdown")),
             (_POWER_RE.format(verb=r"restart|reboot"), lambda m, t: self.power("restart")),
@@ -935,6 +1030,16 @@ class Jarvis:
             if IS_WIN:
                 subprocess.run(["shutdown", "/a"], capture_output=True, creationflags=0x08000000)
             return self.say("Shutdown cancelled.")
+        if action == "screenoff":
+            self.say(f"Going dark{by}. I'll keep listening, {TITLE}.")
+            return self.dark.enter()
+        if action == "wake":
+            was = self.dark.active
+            self.dark.exit()
+            if not was and IS_WIN:                                    # screen off by Windows itself
+                ctypes.windll.user32.mouse_event(1, 1, 0, 0, 0)
+                ctypes.windll.user32.mouse_event(1, -1, 0, 0, 0)
+            return self.say(f"Welcome back, {TITLE}.")
         if action == "lock":
             self.say(f"Locking the computer{by}.")
             if IS_WIN:

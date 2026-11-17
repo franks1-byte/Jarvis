@@ -18,7 +18,7 @@ import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-POWER_ACTIONS = ("shutdown", "restart", "sleep", "lock", "cancel")
+POWER_ACTIONS = ("shutdown", "restart", "sleep", "lock", "cancel", "screenoff", "wake")
 SKIP_ADAPTERS = ("loopback", "vethernet", "virtual", "vmware", "vbox", "bluetooth", "hyper-v",
                  "tailscale", "zerotier", "wsl", "docker", "npcap", "teredo", "isatap", "pseudo")
 
@@ -212,7 +212,8 @@ class RemoteServer:
             src = (qs.get("from") or ["iPhone"])[0][:20]
             msg = {"shutdown": "Shutting down your laptop now.", "restart": "Restarting your laptop now.",
                    "sleep": "Putting your laptop to sleep.", "lock": "Laptop locked.",
-                   "cancel": "Shutdown cancelled."}[action]
+                   "cancel": "Shutdown cancelled.", "screenoff": "Laptop screen off. Tap Wake to turn it back on.",
+                   "wake": "Waking up your laptop."}[action]
             self.on_event("remote", f"📱 {src}: {action}")
             h._send(200, msg)
             threading.Thread(target=lambda: (time.sleep(0.4), self.jarvis.power(action, source=src)),
@@ -241,7 +242,7 @@ class RemoteServer:
         ip = net["ip"]
         return {"hostname": net["hostname"], "ip": ip, "port": self.port, "adapters": net["adapters"],
                 "active": net["active"], "panel": self.panel_url(ip),
-                "links": {a: self.api_url(a, ip) for a in ("shutdown", "sleep", "lock", "restart", "cancel")},
+                "links": {a: self.api_url(a, ip) for a in ("wake", "screenoff", "shutdown", "sleep", "lock", "restart", "cancel")},
                 "command": self.api_url("command", ip) + "&q="}
 
     # ── phone web app ──
@@ -290,6 +291,9 @@ button{font:inherit;color:inherit;border:1px solid var(--line);background:var(--
 .pw span{font-size:13px}
 .pw:active{background:var(--panel2)}
 .pw.danger svg{stroke:var(--red)}
+.pw.big{min-height:104px}.pw.big span{font-size:15px;font-weight:600}
+.pw.on{border-color:#1d5a44;background:#071a14}.pw.on svg{stroke:var(--green)}
+.pw.off{border-color:#2a3a4e}
 .pw.arm{border-color:var(--amber);background:#1a1407}
 .pw.arm span{color:var(--amber)}
 .card{margin-top:16px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px}
@@ -333,6 +337,10 @@ opacity:0;background:var(--panel2);border:1px solid var(--line);padding:10px 16p
 </svg></div>
 <div class="stats mono" id="stats"><span>—</span></div>
 
+<div class="grid" style="margin-bottom:10px">
+  <button class="pw big on" data-act="wake"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span>Turn ON</span></button>
+  <button class="pw big off" data-act="screenoff"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M8 8l8 4M16 8l-8 4"/></svg><span>Turn OFF</span></button>
+</div>
 <div class="grid">
   <button class="pw" data-act="lock"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Lock</span></button>
   <button class="pw" data-act="sleep" data-confirm="1"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg><span>Sleep</span></button>
@@ -354,8 +362,9 @@ opacity:0;background:var(--panel2);border:1px solid var(--line);padding:10px 16p
 </div>
 
 <details id="setup">
-  <summary>⚡ Turn the laptop ON from iPhone — setup</summary>
-  <div class="note">When the laptop is off this page can't load, so waking it uses Wake-on-LAN from the free
+  <summary>⚡ Wake from real Sleep (Wake-on-LAN) — advanced</summary>
+  <div class="note"><b>Turn OFF / Turn ON</b> above works on every laptop (screen off + locked, Jarvis keeps running).
+  Waking from real Sleep or Shutdown needs Wake-on-LAN from the free
   <b>Wake Me Up – Wake-on-LAN</b> app. Add a device in that app with these values:</div>
   <div class="kv" id="wake"></div>
   <div class="note warn" id="wakewarn"></div>

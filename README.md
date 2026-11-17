@@ -49,6 +49,8 @@ Sugdi sa **"Jarvis"**. Human sa usa ka command, 8 seconds nga dili na kinahangla
 | Jarvis, shutdown my laptop / turn off my laptop | **Mopalong dayon** (walay pangutana) |
 | Jarvis, restart my laptop / sleep my laptop | Restart / Sleep dayon |
 | Jarvis, cancel shutdown | I-cancel ang shutdown |
+| Jarvis, screen off / go dark | **Screen Off mode**: lock + itom ang screen, pero buhi pa si Jarvis |
+| Jarvis, wake up | Pasigaon balik ang screen |
 | Jarvis, phone remote | Ipakita ang QR code para sa iPhone |
 | Jarvis, tell me a joke / flip a coin / roll a dice | Fun |
 | Jarvis, goodbye | Mo-offline |
@@ -166,7 +168,18 @@ Para i-mute: i-click ang **VOICE ● ON** sa window.
 
 Sa panel, kaduha i-tap ang Shutdown, Restart, o Sleep para dili ma-accidental. Pwede pud ka mo-type og command (pananglitan *"open youtube"*, *"what time is it"*), ug ang tubag ni Jarvis mogawas sa phone.
 
-#### 2) I-ON ang laptop gikan sa iPhone (Wake-on-LAN)
+#### 2) ⭐ Turn ON / Turn OFF (mo-work sa TANANG laptop, bisan Wi-Fi ra)
+Sa iPhone panel, gamita ang **Turn OFF** ug **Turn ON** buttons sa taas:
+- **Turn OFF**: ma-lock ang laptop ug mahimong itom ang screen (0% brightness). Pero magpabilin nga buhi si Jarvis.
+- **Turn ON**: mosiga balik ang screen ug moingon si Jarvis og *"Welcome back, master."* Dayon i-unlock nimo.
+- Kung hilabtan nimo ang keyboard o mouse, automatic mobalik ang screen.
+- Kung kulang na sa 15% ang battery ug wala naka-charge, automatic siya mo-normal aron dili maubos ang battery.
+- Pwede pud gamit voice: *"Jarvis, screen off"* ug *"Jarvis, wake up"*.
+
+> Ngano dili tinuod nga Sleep? Kadaghanan sa Wi-Fi laptops dili mapukaw gikan sa Sleep o Shutdown pinaagi sa network. Ang Screen Off mode ang paagi nga mo-work bisan unsang laptop. Gamay ra ang gamit niini nga battery kay patay ang screen, pero mas maayo kung naka-charge.
+> ⚠️ Ayaw **isira ang lid**. Mo-sleep ang laptop kung isira.
+
+#### 3) I-ON gikan sa tinuod nga Sleep/Shutdown (Wake-on-LAN, advanced)
 Kung patay ang laptop, wala na si Jarvis, so ang iPhone mismo ang mopadala og "magic packet" aron mo-on ang laptop.
 
 **Sa laptop (isa ra ka higayon):**
@@ -184,11 +197,11 @@ Kung patay ang laptop, wala na si Jarvis, so ang iPhone mismo ang mopadala og "m
 
 > ⚠️ **Importante:** Kadaghanan sa laptops **dili mo-on gikan sa Shutdown kung Wi-Fi ra**. Ethernet cable ang kinahanglan. Kung walay Ethernet port ang imong laptop, gamita ang **"Jarvis, sleep my laptop"** imbes nga shutdown. Ang ubang laptops mo-wake gikan sa sleep pinaagi sa Wi-Fi. O mopalit og USB-to-Ethernet adapter nga naay Wake-on-LAN.
 
-#### 3) Himoang tinuod nga "app" + Siri: ang **Jarvis Remote** Shortcut
+#### 4) Himoang tinuod nga "app" + Siri: ang **Jarvis Remote** Shortcut
 Shortcuts app → **+** → ngalan: **Jarvis Remote** → idugang kini nga mga action:
 
 1. **Choose from Menu** nga naay: `⚡ Turn ON`, `⏻ Shutdown`, `🌙 Sleep`, `🔒 Lock`, `🔄 Restart`, `🎙️ Command`
-2. Sa **⚡ Turn ON**: idugang ang action sa **Wake Me Up** app (pangitaa ang "Wake Me Up" sa action search), dayon pili-a ang imong laptop. Sunod, **Speak Text**: `Waking up your laptop, master.`
+2. Sa **⚡ Turn ON**: **Get Contents of URL** gamit ang *WAKE* link, dayon **Speak Text**. Kung naka-setup ang Wake-on-LAN, pwede pud gamiton ang **Wake Me Up** action.
 3. Sa **⏻ Shutdown**: **Get Contents of URL**, i-paste ang *SHUTDOWN* link gikan sa phone panel (🔗 Links), dayon **Speak Text** → *Contents of URL*.
 4. Parehas sa **Sleep**, **Lock**, ug **Restart**, gamit ang ilang tagsa-tagsa ka link.
 5. Sa **🎙️ Command**:
